@@ -3,11 +3,11 @@ fn main() {
     s.push_str(", world!");
     let te = "te";
     let st = "st";
-    let test = format!("{}{}", te, st);
-    take_ownership(&test);
+    let mut test = format!("{}{}", te, st);
+    change(&mut test);
     println!("{}", test);
 }
 
-fn take_ownership(s: &String){
-    println!("{}", s);
+fn change(s:&mut String) {
+    s.push_str(" Bye!");
 }
