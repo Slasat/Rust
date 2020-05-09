@@ -1,11 +1,59 @@
 use num::bigint::{BigInt, ToBigInt};
 use num::rational::Ratio;
 use num::traits::ToPrimitive;
+use reqwest::{Error, StatusCode};
+use serde::Deserialize;
+use serde_json::Value;
+use std::collections::HashMap;
 use std::io;
+
+const APPID: &str = "3917e0cb50a9472ab78aabd8c6ac2998";
 
 struct Exchanger {
     amount_from: Ratio<BigInt>,
     rate: Ratio<BigInt>,
+}
+
+#[derive(Deserialize, Debug)]
+struct OpenExchangeRates {
+    disclaimer: String,
+    license: String,
+    timestamp: u32,
+    base: String,
+    rates: HashMap<String, f64>,
+}
+
+struct Rate {
+    rates: HashMap<String, f64>,
+}
+
+impl Rate {
+    pub fn new() -> Option<Self> {
+        let rates: HashMap<String, f64> = match Rate::_get_rates() {
+            Ok(rates) => rates,
+            _ => return None,
+        };
+        Some(Self { rates: rates })
+    }
+
+    fn _get_rates() -> serde_json::Result<HashMap<String, f64>> {
+        let result: String = match Rate::_run_http() {
+            Ok(body) => body,
+            _ => panic!("Can not get rates!"),
+        };
+        let parsed: OpenExchangeRates = serde_json::from_str(&result)?;
+        Ok(parsed.rates)
+    }
+
+    fn _run_http() -> reqwest::Result<String> {
+        let client = reqwest::blocking::Client::new();
+        let res = client
+            .get("https://openexchangerates.org/api/latest.json")
+            .query(&[("app_id", APPID)])
+            .send()?;
+        let body = res.text();
+        body
+    }
 }
 
 impl Exchanger {
@@ -26,6 +74,7 @@ impl Exchanger {
         };
         Some(Self {
             amount_from: ratio_from,
+
             rate: ratio_rate,
         })
     }
@@ -53,7 +102,15 @@ fn get_float_value() -> Option<f64> {
 }
 
 fn main() {
-    runHttp();
+    let rate = match Rate::new() {
+        Some(rate) => rate,
+        None => {
+            println!("Can not get reates");
+            return;
+        }
+    };
+    println!("{}", rate.rates["ZAR"]);
+    return;
     println!("How much euros do you have?");
     let from_currency: f64 = match get_float_value() {
         Some(num) => num,
@@ -71,5 +128,3 @@ fn main() {
     let converted: f64 = exchanger.convert();
     println!("{} euros whould be {} dollars!", from_currency, converted);
 }
-
-fn runHttp() {}
