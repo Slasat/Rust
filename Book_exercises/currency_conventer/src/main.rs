@@ -1,13 +1,12 @@
-use num::bigint::{BigInt, ToBigInt};
+use num::bigint::BigInt;
 use num::rational::Ratio;
 use num::traits::ToPrimitive;
-use reqwest::{Error, StatusCode};
 use serde::Deserialize;
-use serde_json::Value;
 use std::collections::HashMap;
 use std::io;
 
 const APPID: &str = "3917e0cb50a9472ab78aabd8c6ac2998";
+const URL: &str = "https://openexchangerates.org/api/latest.json";
 
 struct Exchanger {
     amount_from: Ratio<BigInt>,
@@ -47,12 +46,16 @@ impl Rate {
 
     fn _run_http() -> reqwest::Result<String> {
         let client = reqwest::blocking::Client::new();
-        let res = client
-            .get("https://openexchangerates.org/api/latest.json")
-            .query(&[("app_id", APPID)])
-            .send()?;
+        let res = client.get(URL).query(&[("app_id", APPID)]).send()?;
         let body = res.text();
         body
+    }
+
+    pub fn get(self: Rate, name: String) -> Option<f64> {
+        match self.rates.get(&name) {
+            Some(rate) => return Some(*rate),
+            None => return None,
+        }
     }
 }
 
@@ -80,8 +83,7 @@ impl Exchanger {
     }
 
     pub fn convert(self) -> f64 {
-        let converted: Ratio<BigInt> =
-            self.amount_from * self.rate / Ratio::from_integer(100.to_bigint().unwrap());
+        let converted: Ratio<BigInt> = self.amount_from * self.rate;
         let mut converted_return: f64 =
             converted.numer().to_f64().unwrap() / converted.denom().to_f64().unwrap();
         converted_return = (converted_return * 100.0).round() / 100.0;
@@ -101,30 +103,50 @@ fn get_float_value() -> Option<f64> {
     Some(number)
 }
 
+fn get_currency_name() -> String {
+    let mut in_line = String::new();
+    io::stdin()
+        .read_line(&mut in_line)
+        .expect("Failed to read line");
+    in_line.trim().to_string()
+}
+
 fn main() {
     let rate = match Rate::new() {
         Some(rate) => rate,
         None => {
-            println!("Can not get reates");
+            println!("Can not get rates");
             return;
         }
     };
-    println!("{}", rate.rates["ZAR"]);
-    return;
-    println!("How much euros do you have?");
+    println!("Avaliable currencies:");
+    for name in rate.rates.keys() {
+        println!("{}", name);
+    }
+    println!("What target currency is?");
+    let currency_name: String = get_currency_name();
+
+    let rate: f64 = match rate.get(currency_name.to_string()) {
+        Some(num) => num,
+        None => panic!("Can not get rates for {}!", currency_name),
+    };
+
+    println!("Exchange rate from USD to {} is {}.", currency_name, rate);
+
+    println!("How much USD do you have?");
+
     let from_currency: f64 = match get_float_value() {
         Some(num) => num,
         None => panic!("Can not get proper value!"),
     };
-    println!("What is exchsnge rate from euros to dollars USA?");
-    let rate: f64 = match get_float_value() {
-        Some(num) => num,
-        None => panic!("Can not get proper value!"),
-    };
+
     let exchanger = match Exchanger::new(from_currency, rate) {
         Some(exchanger) => exchanger,
         None => return,
     };
     let converted: f64 = exchanger.convert();
-    println!("{} euros whould be {} dollars!", from_currency, converted);
+    println!(
+        "{} of USD whould be {} {}!",
+        from_currency, converted, currency_name
+    );
 }
